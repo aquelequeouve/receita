@@ -106,7 +106,6 @@ scriptCode += "global StatusText\n";
 scriptCode += "global StartButton\n";
 scriptCode += "global PauseButton\n";
 scriptCode += "global Nickname\n";
-scriptCode += "global inputText\n";
 scriptCode += "global processedLines := []\n";
 scriptCode += "global textIndex := 1\n";
 scriptCode += "global isPaused := 0\n";
@@ -114,26 +113,9 @@ scriptCode += "global sleepTime := 6000\n";
 scriptCode += "global waitingAnswer := 0\n";
 scriptCode += "global totalLines := 0\n\n";
 
-if (inputText.includes("{username}")) {
-    scriptCode += "FileCreateDir, %A_ScriptDir%\\AutoScriptConfig\n";
-    scriptCode += "global configFolder := A_ScriptDir . \"\\AutoScriptConfig\"\n";
-    scriptCode += "global configFile := configFolder . \"\\nickname_\" . A_ScriptName . \".ini\"\n\n";
-    
-    scriptCode += "inputText := \"" + inputText.replace(/\n/g, "``n").replace(/"/g, "\"\"") + "\"\n\n";
-    
-    scriptCode += "if (!FileExist(configFile)) {\n";
-    scriptCode += "    Gosub, ShowNicknameConfig\n";
-    scriptCode += "    return\n";
-    scriptCode += "} else {\n";
-    scriptCode += "    IniRead, CheckNickname, %configFile%, User, Nickname\n";
-    scriptCode += "    if (CheckNickname = \"ERROR\" || CheckNickname = \"\") {\n";
-    scriptCode += "        Gosub, ShowNicknameConfig\n";
-    scriptCode += "        return\n";
-    scriptCode += "    }\n";
-    scriptCode += "    Gosub, TransformText\n";
-    scriptCode += "    SetTimer, ShowMainGuiDelayed, -100\n";
-    scriptCode += "}\n\n";
-}
+scriptCode += "FileCreateDir, %A_ScriptDir%\\AutoScriptConfig\n";
+scriptCode += "global configFolder := A_ScriptDir . \"\\AutoScriptConfig\"\n";
+scriptCode += "global configFile := configFolder . \"\\nickname_\" . A_ScriptName . \".ini\"\n\n";
 
 scriptCode += "UpdateStatusMessage(message) {\n";
 scriptCode += "    GuiControl, 1:, StatusText, %message%\n";
@@ -141,6 +123,7 @@ scriptCode += "    SetTimer ClearStatus, -4000\n";
 scriptCode += "}\n\n";
 
 scriptCode += "ShowMainGui:\n";
+scriptCode += "Gui, 1:Destroy\n";
 scriptCode += "Gui, 1:New\n";
 scriptCode += "Gui, 1:+AlwaysOnTop\n";
 scriptCode += "Gui, 1:Color, 1E293B, 243449\n";
@@ -194,7 +177,7 @@ scriptCode += "isPaused := 0\n";
 scriptCode += "UpdateStatusMessage(\"Script será iniciado em 5 segundos...\")\n";
 scriptCode += "Sleep, 5000\n";
 scriptCode += "UpdateStatusMessage(\"Script ativo\")\n";
-scriptCode += "SetTimer, SendNextText, -100\n";
+scriptCode += "SetTimer SendNextText, -100\n";
 scriptCode += "return\n\n";
 
 scriptCode += "PauseScript:\n";
@@ -203,7 +186,7 @@ scriptCode += "    return\n";
 scriptCode += "}\n";
 scriptCode += "if (isPaused = 0) {\n";
 scriptCode += "    isPaused := 1\n";
-scriptCode += "    SetTimer, SendNextText, Off\n";
+scriptCode += "    SetTimer SendNextText, Off\n";
 scriptCode += "    GuiControl, 1:, PauseButton, Continuar\n";
 scriptCode += "    UpdateStatusMessage(\"Script Pausado\")\n";
 scriptCode += "} else {\n";
@@ -212,7 +195,7 @@ scriptCode += "    Sleep, 5000\n";
 scriptCode += "    isPaused := 0\n";
 scriptCode += "    GuiControl, 1:, PauseButton, Pausar\n";
 scriptCode += "    UpdateStatusMessage(\"Script Ativo\")\n";
-scriptCode += "    SetTimer, SendNextText, -100\n";
+scriptCode += "    SetTimer SendNextText, -100\n";
 scriptCode += "}\n";
 scriptCode += "return\n\n";
 
@@ -220,7 +203,7 @@ scriptCode += "ShowQuestion:\n";
 scriptCode += "WinGetPos, mainX, mainY,,, AutoScript RCC\n";
 scriptCode += "confirmX := mainX + 400\n";
 scriptCode += "isPaused := 1\n";
-scriptCode += "SetTimer, SendNextText, Off\n";
+scriptCode += "SetTimer SendNextText, Off\n";
 scriptCode += "UpdateStatusMessage(\"Script pausado, aguardando resposta do aluno...\")\n";
 scriptCode += "if (mainX != \"\" && mainY != \"\") {\n";
 scriptCode += "    Gui, 3:Show, x%confirmX% y%mainY% w220 h100, Confirmação\n";
@@ -240,7 +223,7 @@ scriptCode += "UpdateStatusMessage(\"Script ativo\")\n";
 scriptCode += "isPaused := 0\n";
 scriptCode += "textIndex := waitingAnswer + 1\n";
 scriptCode += "waitingAnswer := 0\n";
-scriptCode += "SetTimer, SendNextText, -100\n";
+scriptCode += "SetTimer SendNextText, -100\n";
 scriptCode += "return\n\n";
 
 scriptCode += "AnswerNo:\n";
@@ -263,15 +246,44 @@ let processedLines = [];
 lines.forEach(line => {
     const trimmedLine = line.trim();
     if (trimmedLine) {
-        processedLines.push(trimmedLine);
+        const isAllCaps = /^[A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ\s]+$/.test(trimmedLine);
+        const isQuestion = trimmedLine.includes('?');
+        const isBulletPoint = trimmedLine.startsWith('-');
+        const hasColon = trimmedLine.includes(':');
+
+        if (isAllCaps || isQuestion || isBulletPoint || processedLines.length === 0) {
+            processedLines.push(trimmedLine);
+        } else if (hasColon && processedLines.length > 0) {
+            const lastLine = processedLines[processedLines.length - 1];
+            if (lastLine.includes(':')) {
+                processedLines.push(trimmedLine);
+            } else {
+                if (!lastLine.includes('?') && !lastLine.startsWith('-') && 
+                    !/^[A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ\s]+$/.test(lastLine)) {
+                    processedLines[processedLines.length - 1] += ' ' + trimmedLine;
+                } else {
+                    processedLines.push(trimmedLine);
+                }
+            }
+        } else {
+            const lastLine = processedLines[processedLines.length - 1];
+            if (!lastLine.includes('?') && !lastLine.startsWith('-') && 
+                !/^[A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ\s]+$/.test(lastLine)) {
+                processedLines[processedLines.length - 1] += ' ' + trimmedLine;
+            } else {
+                processedLines.push(trimmedLine);
+            }
+        }
     }
 });
+
+let currentIndex = 1;
 
 scriptCode += "totalLines := " + processedLines.length + "\n\n";
 
 scriptCode += "SendNextText:\n";
 scriptCode += "if (isPaused = 1) {\n";
-scriptCode += "    SetTimer, SendNextText, Off\n";
+scriptCode += "    SetTimer SendNextText, Off\n";
 scriptCode += "    return\n";
 scriptCode += "}\n\n";
 
@@ -283,123 +295,128 @@ scriptCode += "    GuiControl, 1:Disable, PauseButton\n";
 scriptCode += "    return\n";
 scriptCode += "}\n\n";
 
-processedLines.forEach((line, index) => {
-    scriptCode += "if (textIndex = " + (index + 1) + ") {\n";
-    scriptCode += "    if (isPaused = 1) {\n";
-    scriptCode += "        SetTimer, SendNextText, Off\n";
-    scriptCode += "        return\n";
-    scriptCode += "    }\n";
+processedLines.forEach(line => {
+    const chunks = splitTextIntoChunks(line, 85);
+    chunks.forEach(chunk => {
+        if (chunk.trim()) {
+            scriptCode += "if (textIndex = " + currentIndex + ") {\n";
+            scriptCode += "    if (isPaused = 1) {\n";
+            scriptCode += "        SetTimer SendNextText, Off\n";
+            scriptCode += "        return\n";
+            scriptCode += "    }\n";
 
-    // Escapar aspas duplas no texto
-    const escapedLine = line.replace(/"/g, "\"\"");
-    
-    scriptCode += "    Send, {Raw}" + escapedLine + "\n";
-    scriptCode += "    Send, {Shift Down}{Enter}{Shift Up}\n";
+            if (/^[A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ\s*]+$/.test(chunk)) {
+                scriptCode += "    Sleep, 1000\n";
+            }
 
-    if (line.includes('?')) {
-        scriptCode += "    UpdateStatusMessage(\"Script pausado, aguardando resposta do aluno...\")\n";
-        scriptCode += "    waitingAnswer := " + (index + 1) + "\n";
-        scriptCode += "    isPaused := 1\n";
-        scriptCode += "    SetTimer, SendNextText, Off\n";
-        scriptCode += "    Gosub, ShowQuestion\n";
-        scriptCode += "    return\n";
-    } else {
-        scriptCode += "    Sleep, %sleepTime%\n";
-        scriptCode += "    textIndex := " + (index + 2) + "\n";
-        scriptCode += "    SetTimer, SendNextText, -100\n";
-    }
-    scriptCode += "}\n\n";
+            scriptCode += "    Send, {Raw}" + chunk.replace(/"/g, '""') + "\n";
+            scriptCode += "    Send, {Shift Down}{Enter}{Shift Up}\n";
+
+            if (chunk.includes('?')) {
+                scriptCode += "    UpdateStatusMessage(\"Script pausado, aguardando resposta do aluno...\")\n";
+                scriptCode += "    waitingAnswer := " + currentIndex + "\n";
+                scriptCode += "    isPaused := 1\n";
+                scriptCode += "    SetTimer SendNextText, Off\n";
+                scriptCode += "    Gosub, ShowQuestion\n";
+                scriptCode += "    return\n";
+            } else {
+                scriptCode += "    Sleep, %sleepTime%\n";
+                scriptCode += "    textIndex := " + (currentIndex + 1) + "\n";
+                scriptCode += "    SetTimer SendNextText, -100\n";
+            }
+            scriptCode += "}\n\n";
+            currentIndex++;
+        }
+    });
 });
 
-scriptCode += "ShowNicknameConfig:\n";
-scriptCode += "Gui, 2:+LastFound\n";
-scriptCode += "WinGet, existingWindow,, A\n";
-scriptCode += "if (existingWindow) {\n";
-scriptCode += "    WinActivate\n";
-scriptCode += "    return\n";
-scriptCode += "}\n";
-scriptCode += "Gui, 2:New\n";
-scriptCode += "Gui, 2:+AlwaysOnTop -MinimizeBox -SysMenu\n";
-scriptCode += "Gui, 2:Color, 1E293B, 243449\n";
-scriptCode += "Gui, 2:Margin, 20, 20\n";
-scriptCode += "Gui, 2:Font, s10 bold cE2E8F0\n";
-scriptCode += "Gui, 2:Add, Text, x20 y20 w200 h30, Digite seu nickname (máx 25 caracteres):\n";
-scriptCode += "Gui, 2:Font, s10 normal\n";
-scriptCode += "Gui, 2:Add, Edit, x20 y60 w200 vNickname Limit25\n";
-scriptCode += "Gui, 2:Add, Button, x20 y100 w80 h30 gSaveNicknameConfirm, Confirmar\n";
-scriptCode += "Gui, 2:Show, Center w240 h150, Configuração de Nickname\n";
-scriptCode += "return\n\n";
+function splitTextIntoChunks(text, chunkSize) {
+    const regex = new RegExp(`.{1,${chunkSize}}`, 'g');
+    return text.match(regex);
+}
 
-scriptCode += "SaveNicknameConfirm:\n";
-scriptCode += "Gui, 2:Submit, NoHide\n";
-scriptCode += "if (Nickname = \"\") {\n";
-scriptCode += "    MsgBox, Por favor, digite um nickname.\n";
-scriptCode += "    return\n";
-scriptCode += "}\n";
-scriptCode += "if (RegExMatch(Nickname, \"[\\s]\")) {\n";
-scriptCode += "    MsgBox, O nickname não pode conter espaços.\n";
-scriptCode += "    return\n";
-scriptCode += "}\n";
-scriptCode += "if (StrLen(Nickname) < 3) {\n";
-scriptCode += "    MsgBox, O nickname deve ter pelo menos 3 caracteres.\n";
-scriptCode += "    return\n";
-scriptCode += "}\n";
-scriptCode += "IniWrite, %Nickname%, %configFile%, User, Nickname\n";
-scriptCode += "Gui, 2:Destroy\n";
-scriptCode += "textIndex := 1\n";
-scriptCode += "Gosub, ShowConfigWarning\n";
-scriptCode += "return\n\n";
+if (inputText.includes("{username}")) {
+    scriptCode = `
+        global inputText := "${inputText.replace(/"/g, '""')}"
+        if (!FileExist(configFile)) {
+            Gosub, ShowNicknameConfig
+            return
+        }
+        IniRead, CheckNickname, %configFile%, User, Nickname
+        if (CheckNickname = "ERROR" || CheckNickname = "") {
+            FileDelete, %configFile%
+            Gosub, ShowNicknameConfig
+            return
+        }
+        Nickname := CheckNickname
+        Gosub, TransformText
+        SetTimer, ShowMainGuiDelayed, -100
+    ` + "\n" + scriptCode;
 
-scriptCode += "ShowConfigWarning:\n";
-scriptCode += "Gui, 4:New\n";
-scriptCode += "Gui, 4:+AlwaysOnTop\n";
-scriptCode += "Gui, 4:Color, 1E293B, 243449\n";
-scriptCode += "Gui, 4:Margin, 20, 20\n";
-scriptCode += "Gui, 4:Font, s10 bold cE2E8F0\n";
-scriptCode += "Gui, 4:Add, Text, x20 y20 w280, Um arquivo de configuração foi criado.`nNão o exclua; ele armazena seu nickname.\n";
-scriptCode += "Gui, 4:Add, Button, x120 y70 w80 h30 gCloseWarning, Entendi\n";
-scriptCode += "Gui, 4:Show, w320 h120 Center, Aviso Importante\n";
-scriptCode += "return\n\n";
+    scriptCode += "ShowNicknameConfig:\n";
+    scriptCode += "Gui, 2:New\n";
+    scriptCode += "Gui, 2:+AlwaysOnTop -MinimizeBox -SysMenu\n";
+    scriptCode += "Gui, 2:Color, 1E293B, 243449\n";
+    scriptCode += "Gui, 2:Margin, 20, 20\n";
+    scriptCode += "Gui, 2:Font, s10 bold cE2E8F0\n";
+    scriptCode += "Gui, 2:Add, Text, x20 y20 w200 h30, Digite seu nickname (máx 25 caracteres):\n";
+    scriptCode += "Gui, 2:Font, s10 normal\n";
+    scriptCode += "Gui, 2:Add, Edit, x20 y60 w200 vNickname Limit25\n";
+    scriptCode += "Gui, 2:Add, Button, x20 y100 w80 h30 gSaveNicknameConfirm, Confirmar\n";
+    scriptCode += "Gui, 2:Show, Center w240 h150, Configuração de Nickname\n";
+    scriptCode += "return\n\n";
 
-scriptCode += "CloseWarning:\n";
-scriptCode += "Gui, 4:Destroy\n";
-scriptCode += "Gosub, TransformText\n";
-scriptCode += "SetTimer, ShowMainGuiDelayed, -100\n";
-scriptCode += "return\n\n";
+    scriptCode += "SaveNicknameConfirm:\n";
+    scriptCode += "Gui, 2:Submit, NoHide\n";
+    scriptCode += "if (Nickname = \"\") {\n";
+    scriptCode += "    MsgBox, Por favor, digite um nickname.\n";
+    scriptCode += "    return\n";
+    scriptCode += "}\n";
+    scriptCode += "if (RegExMatch(Nickname, \"[\\s]\")) {\n";
+    scriptCode += "    MsgBox, O nickname não pode conter espaços.\n";
+    scriptCode += "    return\n";
+    scriptCode += "}\n";
+    scriptCode += "if (StrLen(Nickname) < 3) {\n";
+    scriptCode += "    MsgBox, O nickname deve ter pelo menos 3 caracteres.\n";
+    scriptCode += "    return\n";
+    scriptCode += "}\n";
+    scriptCode += "IniWrite, %Nickname%, %configFile%, User, Nickname\n";
+    scriptCode += "Gui, 2:Destroy\n";
+    scriptCode += "Gosub, TransformText\n";
+    scriptCode += "SetTimer, ShowMainGuiDelayed, -100\n";
+    scriptCode += "return\n\n";
 
-scriptCode += "ShowMainGuiDelayed:\n";
-scriptCode += "Gosub, ShowMainGui\n";
-scriptCode += "return\n\n";
+    scriptCode += "ShowMainGuiDelayed:\n";
+    scriptCode += "Gosub, ShowMainGui\n";
+    scriptCode += "return\n\n";
 
-scriptCode += "TransformText:\n";
-scriptCode += "IniRead, Nickname, %configFile%, User, Nickname\n";
-scriptCode += "if (Nickname = \"ERROR\" || Nickname = \"\") {\n";
-scriptCode += "    FileDelete, %configFile%\n";
-scriptCode += "    Gosub, ShowNicknameConfig\n";
-scriptCode += "    return\n";
-scriptCode += "}\n";
-scriptCode += "StringReplace, inputText, inputText, {username}, %Nickname%, All\n";
-scriptCode += "return\n";
-
-if (!inputText.includes("{username}")) {
-    scriptCode += "\nGosub, ShowMainGui\n";
+    scriptCode += "TransformText:\n";
+    scriptCode += "IniRead, Nickname, %configFile%, User, Nickname\n";
+    scriptCode += "if (Nickname = \"ERROR\" || Nickname = \"\") {\n";
+    scriptCode += "    FileDelete, %configFile%\n";
+    scriptCode += "    Gosub, ShowNicknameConfig\n";
+    scriptCode += "    return\n";
+    scriptCode += "}\n";
+    scriptCode += "StringReplace, processedText, inputText, {username}, %Nickname%, All\n";
+    scriptCode += "return\n\n";
+} else {
+    scriptCode += "Gosub, ShowMainGui\n";
 }
 
 return {
-   
-  
-  
-  statusCode: 200,
-    body: JSON.stringify({ scriptCode })
+    statusCode: 200,
+    body: JSON.stringify({ 
+        code: scriptCode 
+    })
 };
 
-            
-    } catch (error) {
-        console.error('Erro no processamento:', error);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ error: "Erro ao processar o texto" })
-        };
-    }
-};
-
+} catch (error) {
+    console.error('Erro no processamento:', error);
+    return {
+        statusCode: 500,
+        body: JSON.stringify({ 
+            error: "Erro ao processar o texto" 
+        })
+    };
+}
+}; 
